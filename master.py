@@ -1,13 +1,17 @@
 import cv2
 import json
 import numpy as np
-
+from mrcnn import utils
+import mrcnn.model as modellib
+from mrcnn import visualize
 
 def init_model():#TODO: actually initialize model
-    pass
+    model = modellib.MaskRCNN(mode="inference", model_dir=MODEL_DIR, config=config)
+    model.load_weights(weights_path, by_name = True)
+    return model
 
 def steady_state(video_name):
-    init_model()
+    model = init_model()
     vidcap = cv2.VideoCapture(video_name)
     success,image = vidcap.read()
     curr_state = False
@@ -20,7 +24,7 @@ def steady_state(video_name):
     i = 0
     while success:
         # Process image
-        pred = eval(image)
+        pred = eval(image, model)
         state = parse_json(pred, curr_state)
         state_buffer.append(state)
         if len(state_buffer) == len_buffer:
@@ -33,10 +37,10 @@ def steady_state(video_name):
         i += 1
     return scoop_list
 
-def eval(image): #TODO: Make this work
-    return tfnet.return_predict(image)
+def eval(image, model): #TODO: Make this work
+    return model.detect([image])
 
-def parse_json(predi, default):
+def parse_json(pred, default):
     od,conv = obj_detected(pred) 
     if (od == "full"):
         return True
@@ -56,15 +60,8 @@ def logic(curr_state, state_buffer, num_trans):
            return False, 0
     return True, 0
 
-def obj_detected(yolo_dict):
-    conv = 0
-    od = ''
-    for pred in yolo_dict:
-        if od == '':
-            od = pred['label']
-            conv = pred['confidence']
-            continue
-        elif conv < pred['confidence']:
-            conv = pred['confidence']
-            od = pred['label']
-    return od, conv
+def obj_detected(pred):
+    pred = pred[0]
+    class_ids = pred['class_ids']
+    scores = pred['scores']
+    return class_ids[scores.index(max(scores))], max(scores)
